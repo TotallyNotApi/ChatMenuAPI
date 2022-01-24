@@ -14,26 +14,28 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatPacketInterceptor implements Listener
 {
 	public static final String NMS_VERSION    = Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3];
-	public static final String NMS_PACKAGE    = "net.minecraft.server." + NMS_VERSION;
+	public static final String[] PRESENT_VERSIONS = {"v1_17_R0", "v1_17_R1", "v1_18_R0", "v1_18_R1"};
+	public static final String NMS_PACKAGE    = "net.minecraft.server" + NMS_VERSION;
 	public static final String BUKKIT_PACKAGE = "org.bukkit.craftbukkit." + NMS_VERSION;
-	
+
 	private final Field handleField;
 	private final Field connectionField;
 	private final Field networkManagerField;
 	private final Field channelField;
-	
+
 	private final Class<?> chatPacketClass;
 	private final Field    componentsField;
 	private final Field    nmsComponentField;
-	
+
 	private final Gson gson;
-	
+
 	private Map<Player, PlayerChatIntercept> chats = new ConcurrentHashMap<>();
 	
 	public PlayerChatIntercept getChat(Player player)
@@ -45,28 +47,62 @@ public class ChatPacketInterceptor implements Listener
 	
 	public ChatPacketInterceptor(Plugin plugin) throws ReflectiveOperationException
 	{
+
 		Bukkit.getPluginManager().registerEvents(this, plugin);
-		
-		Class<?> craftPlayerClass = Class.forName(BUKKIT_PACKAGE + ".entity.CraftEntity");
-		Class<?> nmsPlayerClass = Class.forName(NMS_PACKAGE + ".EntityPlayer");
-		Class<?> playerConnectionClass = Class.forName(NMS_PACKAGE + ".PlayerConnection");
-		Class<?> networkManagerClass = Class.forName(NMS_PACKAGE + ".NetworkManager");
-		
-		Class<?> chatSerializer = Class.forName(NMS_PACKAGE + ".IChatBaseComponent$ChatSerializer");
-		Field gsonField = chatSerializer.getDeclaredField("a");
-		gsonField.setAccessible(true);
-		gson = (Gson) gsonField.get(null);
-		gsonField.setAccessible(false);
-		
-		
-		handleField = craftPlayerClass.getDeclaredField("entity");
-		connectionField = nmsPlayerClass.getDeclaredField("playerConnection");
-		networkManagerField = playerConnectionClass.getDeclaredField("networkManager");
-		channelField = networkManagerClass.getDeclaredField("channel");
-		
-		chatPacketClass = Class.forName(NMS_PACKAGE + ".PacketPlayOutChat");
-		componentsField = chatPacketClass.getDeclaredField("components");
-		nmsComponentField = chatPacketClass.getDeclaredField("a");
+
+		if(Arrays.stream(PRESENT_VERSIONS).anyMatch(s -> s.equalsIgnoreCase(NMS_VERSION))) {
+
+			Class<?> craftPlayerClass = Class.forName(BUKKIT_PACKAGE + ".entity.CraftEntity");
+			Class<?> nmsPlayerClass = Class.forName("net.minecraft.server.level.EntityPlayer");
+			Class<?> playerConnectionClass = Class.forName("net.minecraft.server.network.PlayerConnection");
+			Class<?> networkManagerClass = Class.forName("net.minecraft.network.NetworkManager");
+
+			Class<?> chatSerializer = Class.forName("net.minecraft.network.chat.IChatBaseComponent$ChatSerializer");
+			Field gsonField = chatSerializer.getDeclaredField("a");
+			gsonField.setAccessible(true);
+			gson = (Gson) gsonField.get(null);
+			gsonField.setAccessible(false);
+
+
+			handleField = craftPlayerClass.getDeclaredField("entity");
+			connectionField = nmsPlayerClass.getDeclaredField("b");
+			networkManagerField = playerConnectionClass.getDeclaredField("a");
+			channelField = networkManagerClass.getDeclaredField("k");
+
+			chatPacketClass = Class.forName("net.minecraft.network.protocol.game.PacketPlayOutChat");
+			componentsField = chatPacketClass.getDeclaredField("components");
+			nmsComponentField = chatPacketClass.getDeclaredField("a");
+
+		}
+		//LEGACY
+		else {
+
+			plugin.getLogger().severe("Using legacy ChatPacketInterceptor..");
+
+			Class<?> craftPlayerClass = Class.forName(BUKKIT_PACKAGE + ".entity.CraftEntity");
+			Class<?> nmsPlayerClass = Class.forName(NMS_PACKAGE + ".EntityPlayer");
+			Class<?> playerConnectionClass = Class.forName(NMS_PACKAGE + ".PlayerConnection");
+			Class<?> networkManagerClass = Class.forName(NMS_PACKAGE + ".NetworkManager");
+
+			Class<?> chatSerializer = Class.forName(NMS_PACKAGE + ".IChatBaseComponent$ChatSerializer");
+			Field gsonField = chatSerializer.getDeclaredField("a");
+			gsonField.setAccessible(true);
+			gson = (Gson) gsonField.get(null);
+			gsonField.setAccessible(false);
+
+
+			handleField = craftPlayerClass.getDeclaredField("entity");
+			connectionField = nmsPlayerClass.getDeclaredField("playerConnection");
+			networkManagerField = playerConnectionClass.getDeclaredField("networkManager");
+			channelField = networkManagerClass.getDeclaredField("channel");
+
+			chatPacketClass = Class.forName(NMS_PACKAGE + ".PacketPlayOutChat");
+			componentsField = chatPacketClass.getDeclaredField("components");
+			nmsComponentField = chatPacketClass.getDeclaredField("a");
+
+		}
+
+
 	}
 	
 	public void disable()
